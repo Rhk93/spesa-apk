@@ -10,7 +10,21 @@ cat > package.json <<'EOF2'
 {"name":"spesa-dieta","version":"1.0.0","private":true}
 EOF2
 
-npm install --no-audit --no-fund @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 sharp
+npm install --no-audit --no-fund @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 sharp \
+  pdfjs-dist@3.11.174 tesseract.js@5 tesseract.js-core@5 @tesseract.js-data/ita
+
+# ---------- lettori di PDF e foto (OCR) inclusi nell'app: funzionano senza internet ----------
+mkdir -p www/lib/tess
+cp node_modules/pdfjs-dist/build/pdf.min.js node_modules/pdfjs-dist/build/pdf.worker.min.js www/lib/
+cp node_modules/tesseract.js/dist/tesseract.min.js node_modules/tesseract.js/dist/worker.min.js www/lib/tess/
+cp node_modules/tesseract.js-core/tesseract-core* www/lib/tess/
+ITA="$(find node_modules/@tesseract.js-data/ita -name 'ita.traineddata.gz' | head -n 1)"
+if [ -n "$ITA" ]; then cp "$ITA" www/lib/tess/ita.traineddata.gz
+else
+  ITA="$(find node_modules/@tesseract.js-data/ita -name 'ita.traineddata' | head -n 1)"
+  gzip -c "$ITA" > www/lib/tess/ita.traineddata.gz
+fi
+ls -la www/lib www/lib/tess
 
 cat > capacitor.config.json <<'EOF2'
 {
