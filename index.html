@@ -486,7 +486,13 @@ function parseDietText(text){
   }
   function openMeal(name){
     if(!cur){cur=ensure(curDays||[0,1,2,3,4,5,6])}
-    var nm=capFirst(cleanFood(name).toLowerCase());
+    var low=cleanFood(name).toLowerCase(),nm;
+    if(/colazione/.test(low)) nm='Colazione';
+    else if(/merenda|pomerid|pomeriggio/.test(low)) nm='Merenda';
+    else if(/spuntino|break|snack|mattin/.test(low)) nm='Spuntino';
+    else if(/pranzo/.test(low)) nm='Pranzo';
+    else if(/cena|sera|nanna/.test(low)) nm='Cena';
+    else nm=capFirst(low);
     meal=cur.meals.find(function(x){return x.name===nm});
     if(!meal){meal={name:nm,items:[]};cur.meals.push(meal)}
   }
@@ -531,6 +537,8 @@ function parseDietText(text){
   }
   var out=[];
   sections.forEach(function(s){
+    var ORD=['Colazione','Spuntino','Pranzo','Merenda','Cena'];
+    s.meals.sort(function(x,y){var i=ORD.indexOf(x.name),j=ORD.indexOf(y.name);return (i<0?9:i)-(j<0?9:j)});
     var meals=s.meals.filter(function(m){return m.items.length}).map(function(m){return {meal:m.name,items:m.items}});
     if(!meals.length) return;
     s.days.forEach(function(d){out.push({day:DAY_NAMES[d],meals:meals})});
@@ -539,7 +547,16 @@ function parseDietText(text){
 }
 
 /* ---------- libri di lettura (PDF e OCR) inclusi nell'app ---------- */
-var libP={};
+var libP={},STAGE='';
+function tmo(promise,ms,stage){
+  STAGE=stage;
+  return new Promise(function(res,rej){
+    var t=setTimeout(function(){rej({code:'timeout',stage:stage})},ms);
+    var ab=function(){clearTimeout(t);rej({code:'cancelled'})};
+    if(ctl&&ctl.signal) ctl.signal.addEventListener('abort',ab,{once:true});
+    Promise.resolve(promise).then(function(v){clearTimeout(t);res(v)},function(e){clearTimeout(t);rej(e&&e.code?e:{code:'fail',stage:stage,msg:String(e&&e.message||e)})});
+  });
+}
 function loadScript(src){
   if(libP[src]) return libP[src];
   return libP[src]=new Promise(function(res,rej){
@@ -549,7 +566,7 @@ function loadScript(src){
 }
 function absUrl(p){return new URL(p,location.href).href}
 async function getPdfJs(){
-  await loadScript('lib/pdf.min.js');
+  await tmo(loadScript('lib/pdf.min.js'),20000,'caricamento del lettore PDF');
   if(!window.pdfjsLib) throw {code:'nolib'};
   window.pdfjsLib.GlobalWorkerOptions.workerSrc=absUrl('lib/pdf.worker.min.js');
   return window.pdfjsLib;
@@ -557,16 +574,16 @@ async function getPdfJs(){
 var ocrW=null;
 async function getOcr(){
   if(ocrW) return ocrW;
-  await loadScript('lib/tess/tesseract.min.js');
+  await tmo(loadScript('lib/tess/tesseract.min.js'),20000,'caricamento del lettore di foto');
   if(!window.Tesseract) throw {code:'nolib'};
   try{
-    ocrW=await window.Tesseract.createWorker('ita',1,{workerPath:absUrl('lib/tess/worker.min.js'),corePath:absUrl('lib/tess/'),langPath:absUrl('lib/tess/'),workerBlobURL:false,gzip:true,cacheMethod:'none'});
-  }catch(e){throw {code:'ocr'}}
+    ocrW=await tmo(window.Tesseract.createWorker('ita',1,{workerPath:absUrl('lib/tess/worker.min.js'),corePath:absUrl('lib/tess'),langPath:absUrl('lib/tess'),workerBlobURL:false,gzip:true,cacheMethod:'none'}),90000,'avvio del riconoscimento testo');
+  }catch(e){if(e&&e.code==='timeout'||e&&e.code==='cancelled') throw e;throw {code:'fail',stage:'avvio del riconoscimento testo',msg:String(e&&e.message||e)}}
   return ocrW;
 }
 async function ocrCanvas(cv){
   var w=await getOcr();
-  var r=await w.recognize(cv);
+  var r=await tmo(w.recognize(cv),120000,'riconoscimento del testo dalla foto');
   return (r&&r.data&&r.data.text)||'';
 }
 function imageToCanvas(file,max){
@@ -599,18 +616,18 @@ function linesFromPdfPage(content){
   }).join('\n');
 }
 async function pdfToText(file,signal,note){
-  var lib=await getPdfJs(),buf=await file.arrayBuffer();
-  var doc;try{doc=await lib.getDocument({data:buf}).promise}catch(e){throw {code:'read'}}
+  var lib=await getPdfJs(),buf=await tmo(file.arrayBuffer(),30000,'lettura del file');
+  var doc=await tmo(lib.getDocument({data:buf}).promise,30000,'apertura del PDF');
   var all=[];
   for(var p=1;p<=doc.numPages;p++){
     if(signal.aborted) throw {code:'cancelled'};
     note('Leggo la pagina '+p+' di '+doc.numPages+'…');
-    var page=await doc.getPage(p),txt=linesFromPdfPage(await page.getTextContent());
+    var page=await tmo(doc.getPage(p),30000,'lettura pagina '+p),txt=linesFromPdfPage(await tmo(page.getTextContent(),30000,'testo della pagina '+p));
     if(txt.replace(/\s/g,'').length<40){
       note('Pagina '+p+' di '+doc.numPages+': riconosco il testo dall\'immagine…');
       var vp=page.getViewport({scale:2.2}),cv=document.createElement('canvas');
       cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);
-      await page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+      await tmo(page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise,60000,'disegno della pagina '+p);
       txt=await ocrCanvas(cv);
     }
     all.push(txt);
@@ -624,6 +641,8 @@ function errCopy(code){
     case 'no_pages':return 'Nei file scelti non ci sono pagine leggibili.';
     case 'read':return 'Non riesco a leggere uno dei file scelti. Riprova.';
     case 'empty':return 'Ho letto il documento ma non ci ho trovato pasti con quantità. Prova con foto più nitide e dritte, oppure incolla il testo.';
+    case 'timeout':return 'Si è bloccato durante: '+STAGE+'. Scrivimi questa frase esatta.';
+    case 'fail':return 'Errore durante: '+STAGE+' ('+(S.errmsg||'')+'). Scrivimi questa frase esatta.';
     default:return 'Qualcosa è andato storto durante la lettura. Riprova.';
   }
 }
@@ -642,7 +661,7 @@ async function runImport(src){
         if(isPdf){text+='\n'+await pdfToText(f,signal,function(m){setBusy(pre+m)})}
         else{
           setBusy(pre+'riconosco il testo…');
-          var cv=await imageToCanvas(f,2400);
+          var cv=await tmo(imageToCanvas(f,2400),30000,'apertura della foto');
           text+='\n'+await ocrCanvas(cv);
         }
       }
@@ -656,6 +675,7 @@ async function runImport(src){
   }catch(e){
     var code=e&&e.code;
     if(code==='cancelled'){closeSheet();toast('Importazione annullata');return}
+    S.errmsg=e&&e.msg||'';if(e&&e.stage) STAGE=e.stage;
     if(!code) try{console.error('import',e&&e.stack||e)}catch(x){}
     S.err=errCopy(code);openSheet('error');
   }finally{ctl=null}
