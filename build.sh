@@ -32,13 +32,13 @@ cat > capacitor.config.json <<'EOF2'
   "appName": "Spesa Dieta",
   "webDir": "www",
   "server": { "androidScheme": "https" },
-  "android": { "backgroundColor": "#25a244" }
+  "android": { "backgroundColor": "#2f6be0" }
 }
 EOF2
 
 npx cap add android
 
-# ---------- icona: spunta bianca su verde ----------
+# ---------- icona: carrello bianco su blu ----------
 cat > icons.js <<'EOF2'
 const sharp = require('sharp');
 const fs = require('fs');
@@ -46,14 +46,19 @@ const path = require('path');
 const res = 'android/app/src/main/res';
 
 const cart = `
-<path d="M28 56l19 19 33-40" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>`;
-const defs = `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4cd964"/><stop offset="1" stop-color="#25a244"/></linearGradient></defs>`;
+<g transform="translate(-1.5,-3)">
+  <path d="M31 38h6l7 24h27" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M39 45h41l-5 17H44z" fill="#fff" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="47" cy="72" r="4.5" fill="#fff"/>
+  <circle cx="68" cy="72" r="4.5" fill="#fff"/>
+</g>`;
+const defs = `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5aa6ff"/><stop offset="1" stop-color="#2f6be0"/></linearGradient></defs>`;
 const svg = (size, body) => Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 108 108">${defs}${body}</svg>`);
-const big = `<g transform="translate(54 54) scale(1.12) translate(-54 -54)">${cart}</g>`;
+const big = `<g transform="translate(54 54) scale(0.86) translate(-54 -54)">${cart}</g>`;
 
 const legacy = (s) => svg(s, `<rect width="108" height="108" rx="26" fill="url(#g)"/>${big}`);
 const round = (s) => svg(s, `<circle cx="54" cy="54" r="54" fill="url(#g)"/>${big}`);
-const foreground = (s) => svg(s, `<g transform="translate(54 54) scale(1.05) translate(-54 -54)">${cart}</g>`);
+const foreground = (s) => svg(s, `<g transform="translate(54 54) scale(0.8) translate(-54 -54)">${cart}</g>`);
 
 const dens = { mdpi: [48, 108], hdpi: [72, 162], xhdpi: [96, 216], xxhdpi: [144, 324], xxxhdpi: [192, 432] };
 
@@ -69,7 +74,7 @@ const dens = { mdpi: [48, 108], hdpi: [72, 162], xhdpi: [96, 216], xxhdpi: [144,
   fs.writeFileSync(path.join(res, 'drawable', 'ic_bg.xml'),
     '<?xml version="1.0" encoding="utf-8"?>\n' +
     '<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">\n' +
-    '  <gradient android:angle="315" android:startColor="#4CD964" android:endColor="#25A244"/>\n' +
+    '  <gradient android:angle="315" android:startColor="#5AA6FF" android:endColor="#2F6BE0"/>\n' +
     '</shape>\n');
   const adaptive =
     '<?xml version="1.0" encoding="utf-8"?>\n' +

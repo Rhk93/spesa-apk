@@ -477,8 +477,30 @@ function parseItem(raw){
   if(s.length<2||/^\d+$/.test(s)) return null;
   return {food:capFirst(s),qty:qty,unit:unit,note:note};
 }
+var JUNK_RE=/https?:\/\/|www\.|[\w.-]+@[\w-]+\.\w+|\.(it|com|net|org|eu|info)\b|\b\d{8,}\b|(^|\s)(tel|telefono|cell|cellulare|fax|p\.?\s?iva|c\.?\s?f\.?|cap)\.?\s*:?\s*\d|^(via|viale|piazza|corso|c\.so|largo|strada|vicolo|contrada|loc\.?|localit[àa])\s+\p{L}|\b\d{5}\s+\p{Lu}[\p{L}]+|^(studio|ambulatorio|poliambulatorio|centro|laboratorio)\b.*\b(medic|nutriz|analisi|biolog)/iu;
+function lineKey(l){return l.toLowerCase().replace(/\s+/g,' ').trim()}
+function cleanLines(text){
+  var pages=String(text||'').replace(/\r/g,'').split('@@PAGE@@').map(function(pg){
+    return pg.split('\n').map(function(l){return l.replace(/\s+/g,' ').trim()}).filter(Boolean);
+  });
+  // in fondo alla pagina: dal primo dato di contatto (sito, indirizzo, telefono) in poi si scarta tutto
+  pages=pages.map(function(ls){
+    for(var i=0;i<ls.length;i++){ if(JUNK_RE.test(ls[i])&&ls.length-i<=10) return ls.slice(0,i); }
+    return ls;
+  });
+  // righe ripetute su più pagine (intestazioni e piè di pagina) senza quantità: scartate
+  var cnt={};
+  pages.forEach(function(ls){var seen={};ls.forEach(function(l){var k=lineKey(l);if(!seen[k]){seen[k]=1;cnt[k]=(cnt[k]||0)+1}})});
+  var out=[];
+  pages.forEach(function(ls){ls.forEach(function(l){
+    if(JUNK_RE.test(l)) return;
+    if(cnt[lineKey(l)]>=3&&pages.length>=3&&!QTY_RE.test(l)&&!MEAL_RE.test(l)&&!dayHeader(l)) return;
+    out.push(l);
+  })});
+  return out;
+}
 function parseDietText(text){
-  var lines=String(text||'').replace(/\r/g,'').split('\n').map(function(l){return l.replace(/\s+/g,' ').trim()}).filter(Boolean);
+  var lines=cleanLines(text);
   var sections=[],curDays=null,cur=null,meal=null,seen={},stop=false,sawDay=false;
   function ensure(days){
     var k=days.join(',');
@@ -660,7 +682,7 @@ async function pdfToText(file,signal,note){
       }
     }
   }
-  return texts.join('\n');
+  return texts.join('\n@@PAGE@@\n');
 }
 function errCopy(code){
   switch(code){
@@ -686,11 +708,11 @@ async function runImport(src){
       for(var i=0;i<files.length;i++){
         if(signal.aborted) throw {code:'cancelled'};
         var f=files[i],isPdf=f.type==='application/pdf'||/\.pdf$/i.test(f.name),pre='File '+(i+1)+' di '+files.length+': ';
-        if(isPdf){text+='\n'+await pdfToText(f,signal,function(m){setBusy(pre+m)})}
+        if(isPdf){text+='\n@@PAGE@@\n'+await pdfToText(f,signal,function(m){setBusy(pre+m)})}
         else{
           setBusy(pre+'riconosco il testo…');
           var cv=await tmo(imageToCanvas(f,2400),30000,'apertura della foto');
-          text+='\n'+await ocrCanvas(cv);
+          text+='\n@@PAGE@@\n'+await ocrCanvas(cv);
         }
       }
     }
