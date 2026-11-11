@@ -190,7 +190,7 @@ var CHECK='<svg viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7"/></svg>';
 var reduced=false;try{reduced=matchMedia('(prefers-reduced-motion: reduce)').matches}catch(e){}
 
 var S={tab:'spesa',sel:0,diet:null,checks:{},edit:false,banner:false,sheet:null,err:''};
-var C={accent:'#34c759',theme:'auto',bg:{type:'none',preset:0,c1:'#667eea',c2:'#4facfe'},veil:25};
+var C={accent:'#34c759',theme:'auto',bg:{type:'none',preset:0,c1:'#667eea',c2:'#4facfe'},veil:25,size:100};
 var PHOTO='',ctl=null,toastT=null;
 
 /* ---------- utilità ---------- */
@@ -241,6 +241,7 @@ function applyLook(){
   var css=bgCss();
   $('#bg').style.background=css;
   r.classList.toggle('hasbg',!!css);
+  r.style.zoom=((Math.min(150,Math.max(80,Number(C.size)||100)))/100).toFixed(2);
   r.style.setProperty('--veil',String((Number(C.veil)||0)/100));
 }
 
@@ -359,6 +360,7 @@ function viewImpostazioni(){
   var h=head('Aspetto','Colori e sfondo');
   h+='<h2 class="gh">Colore principale</h2><div class="group plain"><div class="sw">'+sw+'</div><div class="pick"><label for="cust">Colore personalizzato</label><input id="cust" type="color" value="'+cur+'"></div></div>';
   h+='<h2 class="gh">Aspetto</h2><div class="group plain"><div class="seg">'+th+'</div></div>';
+  h+='<h2 class="gh">Grandezza del testo</h2><div class="group plain"><div class="rng"><label for="fsz"><span>Dimensione</span><span id="fszv">'+Math.round(C.size||100)+'%</span></label><input id="fsz" type="range" min="80" max="150" step="5" value="'+Math.round(C.size||100)+'"></div></div>';
   h+='<h2 class="gh">Sfondo</h2><div class="group plain"><div class="bgs">'+tiles+'</div>';
   if(b.type==='custom') h+='<div class="pick"><label for="bgc1">Primo colore</label><input id="bgc1" type="color" value="'+esc(b.c1)+'"></div><div class="pick"><label for="bgc2">Secondo colore</label><input id="bgc2" type="color" value="'+esc(b.c2)+'"></div>';
   if(b.type==='photo'&&PHOTO) h+='<div class="pick"><span>Foto scelta</span><button class="link" data-act="rmphoto" type="button">Rimuovi</button></div>';
@@ -763,6 +765,7 @@ document.addEventListener('input',function(e){
   var t=e.target;
   if(t.id==='cust'){C.accent=t.value;saveCfg();applyLook();return}
   if(t.id==='bgc1'||t.id==='bgc2'){C.bg[t.id==='bgc1'?'c1':'c2']=t.value;C.bg.type='custom';saveCfg();applyLook();return}
+  if(t.id==='fsz'){C.size=Number(t.value)||100;var z=$('#fszv');if(z)z.textContent=Math.round(C.size)+'%';saveCfg();applyLook();return}
   if(t.id==='veil'){C.veil=Number(t.value);var v=$('#veilv');if(v)v.textContent=Math.round(C.veil)+'%';saveCfg();applyLook();return}
   var f=t.closest&&t.closest('[data-f]');if(!f) return;
   var rowEl=f.closest('[data-id]');if(!rowEl) return;
