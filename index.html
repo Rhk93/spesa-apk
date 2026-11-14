@@ -56,6 +56,7 @@ html.hasbg .group,html.hasbg .card,html.hasbg .note{-webkit-backdrop-filter:blur
 .ltrow{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
 .lt h1{margin:0;font-size:34px;line-height:1.1;font-weight:700;letter-spacing:.2px;text-wrap:balance}
 .lt .sub{margin:4px 0 0;font-size:15px;color:var(--label2)}
+.link[disabled]{opacity:.3;cursor:default}
 .link{background:none;border:0;color:var(--tint-text);font-size:17px;padding:4px 0;cursor:pointer}
 
 .week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;margin:10px 0 6px}
@@ -190,7 +191,7 @@ var CHECK='<svg viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7"/></svg>';
 var reduced=false;try{reduced=matchMedia('(prefers-reduced-motion: reduce)').matches}catch(e){}
 
 var S={tab:'spesa',sel:0,diet:null,checks:{},edit:false,banner:false,sheet:null,err:''};
-var C={accent:'#34c759',theme:'auto',bg:{type:'none',preset:0,c1:'#667eea',c2:'#4facfe'},veil:25,size:100};
+var C={accent:'#34c759',theme:'auto',bg:{type:'none',preset:0,c1:'#667eea',c2:'#4facfe'},veil:25,size:100,mealOrder:['Colazione','Spuntino','Pranzo','Merenda','Cena']};
 var PHOTO='',ctl=null,toastT=null;
 
 /* ---------- utilità ---------- */
@@ -212,6 +213,25 @@ function loadAll(){
   try{var d=JSON.parse(localStorage.getItem(K_DATA)||'null');if(d){S.diet=d.diet||null;S.checks=d.checks||{}}}catch(e){}
   try{var g=JSON.parse(localStorage.getItem(K_CFG)||'null');if(g){Object.keys(g).forEach(function(k){if(k==='bg'&&g.bg)C.bg=Object.assign(C.bg,g.bg);else C[k]=g[k]})}}catch(e){}
   try{PHOTO=localStorage.getItem(K_PHOTO)||''}catch(e){}
+}
+/* ---------- ordine dei pasti (modificabile da Aspetto) ---------- */
+var STD_ORDER=['Colazione','Spuntino','Pranzo','Merenda','Cena'];
+function orderList(){
+  var l=(Array.isArray(C.mealOrder)&&C.mealOrder.length?C.mealOrder:STD_ORDER).slice();
+  if(S.diet&&S.diet.days) Object.keys(S.diet.days).forEach(function(k){(S.diet.days[k].meals||[]).forEach(function(m){
+    if(!l.some(function(x){return norm(x)===norm(m.name)})) l.push(m.name);
+  })});
+  return l;
+}
+function sortAll(){
+  if(!S.diet||!S.diet.days) return;
+  var l=orderList().map(norm);
+  Object.keys(S.diet.days).forEach(function(k){
+    var d=S.diet.days[k];if(!d||!d.meals) return;
+    var tagged=d.meals.map(function(m,i){var r=l.indexOf(norm(m.name));return {m:m,i:i,r:r<0?999:r}});
+    tagged.sort(function(a,b){return a.r-b.r||a.i-b.i});
+    d.meals=tagged.map(function(t){return t.m});
+  });
 }
 function saveData(){try{localStorage.setItem(K_DATA,JSON.stringify({diet:S.diet,checks:S.checks}))}catch(e){toast('Memoria piena: non riesco a salvare')}}
 function saveCfg(){try{localStorage.setItem(K_CFG,JSON.stringify(C))}catch(e){}}
@@ -366,11 +386,14 @@ function viewImpostazioni(){
   if(b.type==='photo'&&PHOTO) h+='<div class="pick"><span>Foto scelta</span><button class="link" data-act="rmphoto" type="button">Rimuovi</button></div>';
   h+='<div class="rng"><label for="veil"><span>Velo sullo sfondo</span><span id="veilv">'+Math.round(C.veil)+'%</span></label><input id="veil" type="range" min="0" max="80" value="'+Math.round(C.veil)+'"></div></div>';
   h+='<p class="muted" style="margin:8px 16px 0">Se lo sfondo rende difficile leggere, aumenta il velo.</p>';
+  var ol=orderList();
+  h+='<h2 class="gh">Ordine dei pasti</h2><div class="group">'+ol.map(function(n,i){return '<div class="row" style="display:flex;align-items:center;gap:8px"><span style="flex:1">'+esc(n)+'</span><button class="link" data-act="mup" data-i="'+i+'" type="button" aria-label="Sposta '+esc(n)+' più in alto"'+(i===0?' disabled':'')+'>▲</button><button class="link" data-act="mdn" data-i="'+i+'" type="button" aria-label="Sposta '+esc(n)+' più in basso"'+(i===ol.length-1?' disabled':'')+'>▼</button></div>'}).join('')+'<button class="row act" data-act="mreset" type="button">Ripristina ordine standard</button></div><p class="muted" style="margin:8px 16px 0">Vale per tutti i giorni e per ogni nuova dieta importata.</p>';
   h+='<h2 class="gh">Dieta</h2><div class="group plain"><button class="row act" data-act="import" type="button">Importa una nuova dieta</button></div><p class="muted" style="margin:8px 16px 0">PDF, foto o testo: la lettura avviene sul telefono, senza internet e senza chiavi. Una nuova dieta sostituisce quella attuale.</p>';
   h+='<div class="group plain" style="margin-top:28px"><button class="row act bad" data-act="wipe" type="button">'+(S.confirm==='wipe'?'Tocca ancora per cancellare':'Cancella dieta e spunte')+'</button></div>';
   return h;
 }
 function render(){
+  sortAll();
   var v=$('#view');
   v.innerHTML=S.tab==='spesa'?viewSpesa():S.tab==='settimana'?viewSettimana():S.tab==='dieta'?viewDieta():viewImpostazioni();
   document.querySelectorAll('.tab').forEach(function(t){t.setAttribute('aria-selected',String(t.dataset.tab===S.tab))});
@@ -438,7 +461,7 @@ function normalizeDiet(parts){
   return count?{v:1,updated:Date.now(),days:days}:null;
 }
 /* ---------- lettura sul telefono (nessuna chiave, nessuna rete) ---------- */
-var MEAL_RE=/^(prima\s+colazione|colazione|spuntino(?:\s+(?:mattina|mattutino|pomeriggio|pomeridiano|serale|sera))?|break|pranzo|merenda|cena|dopo\s*cena|pre\s*-?\s*nanna|post\s*-?\s*cena|snack|(?:pasto|spuntino)\s*\d)\b/i;
+var MEAL_RE=/^[\s(\[\-–•*]*(prima\s+colazione|colazione|spuntino(?:\s+(?:di\s+|a\s+|del\s+|della\s+|nel\s+)?(?:met[àa]\s+|mezza\s+)?(?:mattina|mattutino|pomeriggio|pomeridiano|serale|sera))?|break|pranzo|merenda|cena|dopo\s*cena|pre\s*-?\s*nanna|post\s*-?\s*cena|snack|(?:pasto|spuntino)\s*\d)(?![\p{L}])/iu;
 var DAY_RE=new RegExp('(?<![\\p{L}])(luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato|domenica|lun|mar|mer|gio|ven|sab|dom)(?![\\p{L}])\\.?','giu');
 var UNIT_RE='(kg|gr|g|grammi|ml|cl|dl|l|litri|pz|pezzi|pezzo|fette|fetta|cucchiaini|cucchiaino|cucchiai|cucchiaio|vasetto|vasetti|tazza|tazze|bicchiere|bicchieri|porzione|porzioni|scatoletta|bustina|bustine)';
 var QTY_RE=new RegExp('(\\d+(?:[.,]\\d+)?)\\s*'+UNIT_RE+'\\b','i');
@@ -536,7 +559,7 @@ function parseDietText(text){
       var after=line.slice(mm[0].length).replace(/^[\s:;\-–.()0-9:hH]*?(?=[A-Za-zÀ-ÿ0-9]|$)/,'');
       var head=line.slice(0,mm[0].length);
       openMeal(head);
-      var tail=line.slice(mm[0].length).replace(/^\s*(?:\(?\s*(?:ore\s*)?\d{1,2}[:.]\d{2}\s*\)?)?\s*[:\-–]?\s*/,'');
+      var tail=line.slice(mm[0].length).replace(/^[\s)\]]*(?:\(?\s*(?:ore\s*)?\d{1,2}[:.]\d{2}\s*\)?)?\s*[:\-–]?\s*/,'');
       if(!tail||/^[\s:.\-–()]*$/.test(tail)) continue;
       line=tail;
     }
@@ -720,7 +743,7 @@ async function runImport(src){
     await new Promise(function(r){setTimeout(r,30)});
     var diet=parseDietText(text);
     if(!diet){S.lastText=text;throw {code:'empty'}}
-    S.diet=diet;S.checks={};S.tab='dieta';S.edit=true;S.banner=true;S.sel=0;
+    S.diet=diet;sortAll();S.checks={};S.tab='dieta';S.edit=true;S.banner=true;S.sel=0;
     saveData();closeSheet();window.scrollTo(0,0);render();
   }catch(e){
     var code=e&&e.code;
@@ -753,6 +776,8 @@ function doAct(el){
   else if(a==='retry'){openImport()}
   else if(a==='stop'){if(ctl) ctl.abort()}
   else if(a==='run-text'){var t=(($('#diet-text')||{}).value||'').trim();if(t.length<10){toast('Incolla prima il testo della dieta');return}runImport({text:t})}
+  else if(a==='mup'||a==='mdn'){var l2=orderList(),i2=+el.dataset.i,j2=a==='mup'?i2-1:i2+1;if(j2>=0&&j2<l2.length){var t2=l2[i2];l2[i2]=l2[j2];l2[j2]=t2;C.mealOrder=l2;saveCfg();sortAll();saveData();render()}}
+  else if(a==='mreset'){C.mealOrder=STD_ORDER.slice();saveCfg();sortAll();saveData();render();toast('Ordine ripristinato')}
   else if(a==='example'){S.diet=exampleDiet();S.checks={};saveData();render()}
   else if(a==='edit'){S.edit=!S.edit;if(!S.edit)S.banner=false;render()}
   else if(a==='reset'){S.checks={};saveData();render();toast('Spunte azzerate')}
